@@ -27,6 +27,9 @@ Eval Agent (판정 트랙 + 기록 트랙 병렬 실행)
                     └── 반려 → 종료
 ```
 
+<img width="1440" height="1560" alt="image" src="https://github.com/user-attachments/assets/b5ccfda4-40b8-4bc4-99cc-b360a2a79b24" />
+
+
 ---
 
 ## 파일 구조
