@@ -1,0 +1,6 @@
+# 메모리 파일 (개인 설정)
+.claude/projects/
+
+# 시스템 파일
+.DS_Store
+Thumbs.db
