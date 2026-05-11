@@ -37,10 +37,12 @@ Customer Agent/
 ├── CLAUDE.md                        # 전체 시스템 동작 정의 (Agent 지침서)
 ├── README.md                        # 본 파일
 ├── eval_log.md                      # Eval 결과 누적 기록 (자동 생성)
+├── eval_comparison_report.md        # v1 vs v2 Eval 비교 분석 리포트
 │
 ├── 예제파일/                         # Claude Knowledge 파일 (핵심 참조 문서)
 │   ├── reference_knowledge.md       # 제품 지식 베이스 (Customer Agent 참조)
-│   ├── eval_criteria.md             # 5차원 평가 기준표 (Rubric)
+│   ├── eval_criteria.md             # 5차원 평가 기준표 v1 (Likert 1~5점)
+│   ├── eval_criteria_v2.md          # Binary Judge 평가 기준표 v2 ← NEW
 │   ├── test_cases.md                # Golden-Set 3개 + Edge Case 6개
 │   ├── test_samples.md              # 테스트 입력 데이터 10개
 │   ├── draft_prompt.md              # v0.1 초안 프롬프트 + 강사용 보완 포인트
@@ -48,12 +50,17 @@ Customer Agent/
 │   └── quality_control.md          # Guardrail + HITL 워크플로우 가이드
 │
 ├── .claude/
-│   └── commands/                    # Claude Code 커스텀 명령어
-│       ├── customer.md              # /customer — 응답 생성 + 자동 eval
-│       ├── eval.md                  # /eval — 수동 평가 실행
-│       ├── hitl.md                  # /hitl — Slack 스레드 읽고 액션 처리
-│       ├── log.md                   # /log — 전체 Eval 로그 요약
-│       └── compare.md              # /compare — 최근 2개 Eval 비교
+│   ├── commands/                    # Claude Code 커스텀 명령어
+│   │   ├── customer.md              # /customer — 응답 생성 + 자동 eval
+│   │   ├── eval.md                  # /eval — 수동 평가 실행 (v1 기준)
+│   │   ├── eval-v2.md               # /eval-v2 — Binary Judge 평가 (v2 기준) ← NEW
+│   │   ├── hitl.md                  # /hitl — Slack 스레드 읽고 액션 처리
+│   │   ├── log.md                   # /log — 전체 Eval 로그 요약
+│   │   └── compare.md               # /compare — 최근 2개 Eval 비교
+│   │
+│   └── skills/                      # Claude Code Skills ← NEW
+│       └── write-judge-prompt/
+│           └── SKILL.md             # LLM-as-Judge 설계 가이드 (hamelsmu/evals-skills)
 │
 └── project_plan.md                  # 프로젝트 전체 계획 및 실습 시나리오
 ```
@@ -80,7 +87,8 @@ Customer Agent/
 | 명령어 | 설명 |
 |--------|------|
 | `/customer [고객 문의]` | 응답 초안 생성 + 자동 평가까지 한 번에 실행 |
-| `/eval` | 직전 Customer Agent 응답을 수동으로 평가 |
+| `/eval` | 직전 Customer Agent 응답을 수동으로 평가 (v1 Likert) |
+| `/eval-v2` | 직전 응답을 Binary Judge 방식으로 평가 (v2) |
 | `/hitl EVAL-XXX` | Slack 스레드 답장을 읽어 승인/수정/반려 처리 |
 | `/log` | 현재 대화의 전체 Eval 로그 요약 출력 |
 | `/compare` | 가장 최근 2개 Eval 결과를 나란히 비교 |
@@ -156,6 +164,69 @@ Fail 판정 시 담당자에게 Slack DM이 발송되며, 담당자는 스레드
 | `승인` | 응답을 그대로 고객에게 발송 |
 | `수정 [내용]` | 수정사항 반영 후 재리뷰 |
 | `반려` | 프로세스 종료, 수동 대응 전환 |
+
+---
+
+## Eval v2 — Binary Judge 프레임워크
+
+> [hamelsmu/evals-skills](https://github.com/hamelsmu/evals-skills/tree/main/skills/write-judge-prompt)의 **write-judge-prompt** 스킬을 적용하여 기존 Likert 평가(v1)를 Binary Judge 방식(v2)으로 개선했습니다.
+
+### 설계 원칙 (SKILL.md 기반)
+
+| 원칙 | 내용 |
+|------|------|
+| **차원당 하나의 실패 모드** | Judge 하나가 하나의 실패 모드만 판정 |
+| **코드/LLM 분리** | 규칙으로 검사 가능한 항목은 LLM 대신 코드 기반 처리 |
+| **Few-shot 예시 포함** | Pass / Fail / Borderline 3종 예시로 경계 케이스 일관성 확보 |
+| **Critique-first (CoT 강제)** | 판정(verdict) 전 근거(critique) 먼저 서술 |
+
+### v2 구조 (`eval_criteria_v2.md`)
+
+```
+코드 기반 검사 (LLM 불필요)
+  ├── 글자 수: 150 ≤ len(응답) ≤ 300
+  ├── 마크다운: **, ##, -, ` 패턴 검출 시 FAIL
+  ├── 마무리 문장: "말씀해주세요" OR "문의해주세요" 포함 여부
+  └── 고객님 호칭: "고객님" 포함 여부
+
+LLM Binary Judge (5개)
+  ├── Judge 1 — Hallucination: reference_knowledge.md 외 사실 주장 여부
+  ├── Judge 2 — 4단계 구조: 인사→확인→답변→마무리 모두 포함 여부
+  ├── Judge 3 — 톤 & 공감: 불만 문의 시 첫 문장 공감/사과 여부
+  ├── Judge 4 — 완결성: 모든 "?" 질문 답변 여부
+  └── Judge 5 — 안전성: AI 권한 밖 약속 / PII 반복 여부
+
+종합 판정
+  fail_count 0 → PASS (A)
+  fail_count 1 → WARN (B~C)
+  fail_count 2+ → FAIL (D~F)
+```
+
+### v1 vs v2 비교 테스트 결과
+
+5개 샘플 응답(GS-01 모범·Hallucination, EC-02 모범·불량, EC-01 PII 처리)에 두 방식을 동시 적용했습니다.
+
+| 샘플 | v1 등급 | v2 결과 | 일치 여부 | 핵심 차이 |
+|------|---------|---------|---------|----------|
+| Good PRD 응답 | A | PASS(A) | ✅ | - |
+| Hallucination PRD | **C** | **FAIL** | ❌ | v1: 평균에 묻힘 / v2: 즉시 FAIL |
+| Good 환불 응답 | A | PASS(A) | ✅ | - |
+| Bad 환불 응답 | **C** | **FAIL** | ❌ | v1: 단일 점수 불투명 / v2: 3개 Judge FAIL 명시 |
+| Good PII 처리 | **A** | **WARN** | ❌ | v1: 형식 관대 / v2: 글자수 코드 검사 |
+
+**불일치율 60% (3/5)** — 특히 Hallucination 케이스에서 v1은 C(3.10)으로 완화하지만 v2는 명확하게 FAIL을 반환합니다.
+
+> 상세 분석은 [`eval_comparison_report.md`](./eval_comparison_report.md)를 참고하세요.
+
+### 사용 방법
+
+```
+# Binary Judge로 평가 (v2)
+/eval-v2
+
+# 특정 응답 텍스트 평가
+/eval-v2 [응답 텍스트]
+```
 
 ---
 
