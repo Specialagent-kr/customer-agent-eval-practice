@@ -7,7 +7,8 @@
 
 ## 프로젝트 개요
 
-**AI PM 코치**(coach.proagent.kr) 서비스의 고객 문의 응답을 생성·평가·품질통제하는 전체 파이프라인을 Claude Code 환경에서 구현한 실습 프로젝트입니다.
+고객 문의 응답을 생성·평가·품질통제하는 전체 파이프라인을 Claude Code 환경에서 구현한 실습 프로젝트입니다.
+(*Customer Agent와 Eval Agent는 업무 처리 흐름상 컨셉이며, 실제 Multi-Agent 구조로 구현된 것은 아닙니다. 순차적이고 비교적 심플한 Workflow이기 때문에 단일 Agent로 설계되었습니다)
 
 ```
 고객 문의 입력
